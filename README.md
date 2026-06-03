@@ -1,4 +1,4 @@
-# Selectel Vacancies API
+# WalletAPI
 
 FastAPI-приложение для кошельков пользователей, снятия и хранения средств.
 
