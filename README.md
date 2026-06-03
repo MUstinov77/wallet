@@ -12,7 +12,7 @@ FastAPI-приложение для кошельков пользователе�
 ## Быстрый старт
 
 1. Клонируйте репозиторий (или распакуйте проект из архива):
-   `git clone --branch with-bugs https://github.com/selectel/be-test.git`
+   `git clone https://github.com/MUstinov77/wallet.git`
 2. В директории backend Создайте `.env` на основе примера:
    `cp .env.example .env`
 3. Запуск через Docker Desktop:
@@ -26,7 +26,7 @@ FastAPI-приложение для кошельков пользователе�
 
 ## Переменные окружения
 
-- `AUTH_SERCRET_KEY` — ключ для подписи токенов доступа. (для генерации ключа в теминале `openssl rang -hex 32`)
+- `AUTH_SERCRET_KEY` — ключ для подписи токенов доступа. (для генерации ключа в теминале `openssl rand -hex 32`)
 - `JWT_ALGORITM` — алгоритм для генерации и расшифровки токена доступа.
 - `JWT_ISSUER` — кем выдан токен.
 - `TOKEN_EXPIRE_HOURS` — срок действия токена.
