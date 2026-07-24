@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from backend.app.app_factory import create_app
+from backend.app.model.wallet import Wallet
 from backend.app.service.wallet import WalletService, get_wallet_service
 
 from .coftest import (default_user_db, default_wallet_db, mock_db_init,
@@ -58,13 +59,19 @@ async def test_withdraw_from_the_wallet_by_owner(
         default_wallet_db,
         default_user_db,
 ):
-    wallet_service = MagicMock(WalletService)
+    # WalletService.change_balance holds the withdraw business rules, so it
+    # runs for real here; only the DB-touching methods are stubbed out.
+    wallet_service = WalletService(MagicMock(), Wallet)
 
     with patch.object(
         wallet_service,
         "retrieve_one",
         return_value=default_wallet_db,
-    ) as method:
+    ) as method, patch.object(
+        wallet_service,
+        "save_instance",
+        side_effect=lambda instance: instance,
+    ):
         app.dependency_overrides[get_wallet_service] = passthrough(wallet_service)
 
         response = client.post(
@@ -87,7 +94,7 @@ async def test_withdraw_from_the_wallet_by_another_user(
         default_wallet_db,
         another_user_db,
 ):
-    wallet_service = MagicMock(WalletService)
+    wallet_service = WalletService(MagicMock(), Wallet)
 
     with patch.object(
         wallet_service,

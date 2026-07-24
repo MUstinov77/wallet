@@ -1,9 +1,8 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
 
-from backend.app.core.enum.operation import OperationType
 from backend.app.core.exceptions import NotFoundException
 from backend.app.model.wallet import Wallet
 from backend.app.schema.wallet import (OperationRequestSchema,
@@ -56,22 +55,10 @@ async def change_wallet_balance(
     operation_data: OperationRequestSchema,
     wallet_service: WalletService = Depends(get_wallet_service),
 ):
-    wallet = await wallet_service.retrieve_one(Wallet.id, wallet_id, for_update=True)
-    if not wallet:
-        raise NotFoundException
-    match operation_data.operation_type:
-        case OperationType.DEPOSIT:
-            wallet.balance += operation_data.amount
-        case OperationType.WITHDRAW:
-            if operation_data.user_id != wallet.user_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Only owner can withdraw money"
-                )
-            wallet_balance = wallet.balance
-            if wallet_balance - operation_data.amount < 0:
-                raise HTTPException(status_code=400, detail="Not enough money")
-            wallet.balance -= operation_data.amount
-        case _:
-            raise HTTPException(status_code=400, detail="Smt gone wrong")
-    return wallet
+    updated_wallet = await wallet_service.change_balance(wallet_id, operation_data)
+    if not updated_wallet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Failed to change wallet balance",
+        )
+    return updated_wallet

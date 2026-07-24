@@ -93,3 +93,15 @@ class BaseService:
                 status_code=400,
                 detail="Error while updating instance"
             )
+
+    async def save_instance(self, instance):
+        try:
+            await self.session.commit()
+            await self.session.refresh(instance)
+            return instance
+        except SQLAlchemyError:
+            await self.session.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail="Error while updating instance"
+            )
