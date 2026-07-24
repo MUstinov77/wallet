@@ -41,10 +41,13 @@ class BaseService:
             self,
             field: Any,
             field_value: Any,
+            for_update: bool = False,
             *args,
             **kwargs
     ):
         query = select(self.model).where(field == field_value)
+        if for_update:
+            query = query.with_for_update()
         result = await self.session.execute(query)
         return result.scalars().first()
 

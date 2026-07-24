@@ -5,10 +5,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
 
-    AUTH_SECRET_KEY: str
-    JWT_ALGORITHM: str
-    JWT_ISSUER: str
-    TOKEN_EXPIRE_HOURS: int
     TITLE: str = "WalletApi"
     DB_USER: str
     DB_PASSWORD: str

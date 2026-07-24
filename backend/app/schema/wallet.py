@@ -11,6 +11,7 @@ class OperationRequestSchema(BaseModel):
 
     operation_type: OperationType
     amount: Decimal
+    user_id: uuid.UUID
 
 
 class WalletCreateSchema(BaseModel):
