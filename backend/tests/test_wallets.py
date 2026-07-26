@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -84,9 +85,122 @@ async def test_withdraw_from_the_wallet_by_owner(
         )
         assert response.status_code == 200
         assert method.call_count == 1
+        method.assert_called_once_with(Wallet.id, default_wallet_db.id, for_update=True)
         data = response.json()
         assert data["id"] == str(default_wallet_db.id)
         assert data["balance"] == "90.00"
+
+
+async def test_deposit_to_the_wallet(mock_db_init, default_wallet_db):
+    wallet_service = WalletService(MagicMock(), Wallet)
+
+    with patch.object(
+        wallet_service,
+        "retrieve_one",
+        return_value=default_wallet_db,
+    ), patch.object(
+        wallet_service,
+        "save_instance",
+        side_effect=lambda instance: instance,
+    ):
+        app.dependency_overrides[get_wallet_service] = passthrough(wallet_service)
+
+        response = client.post(
+            f"/api/v1/wallets/{default_wallet_db.id}/operation/",
+            json={
+                "operation_type": "DEPOSIT",
+                "amount": "10.00",
+                "user_id": str(uuid.uuid4()),
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["balance"] == "110.00"
+
+
+async def test_withdraw_exact_balance_reaches_zero(
+        mock_db_init,
+        default_wallet_db,
+        default_user_db,
+):
+    wallet_service = WalletService(MagicMock(), Wallet)
+
+    with patch.object(
+        wallet_service,
+        "retrieve_one",
+        return_value=default_wallet_db,
+    ), patch.object(
+        wallet_service,
+        "save_instance",
+        side_effect=lambda instance: instance,
+    ):
+        app.dependency_overrides[get_wallet_service] = passthrough(wallet_service)
+
+        response = client.post(
+            f"/api/v1/wallets/{default_wallet_db.id}/operation/",
+            json={
+                "operation_type": "WITHDRAW",
+                "amount": "100.00",
+                "user_id": str(default_user_db.id),
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["balance"] == "0.00"
+
+
+async def test_withdraw_more_than_balance_fails_and_balance_unchanged(
+        mock_db_init,
+        default_wallet_db,
+        default_user_db,
+):
+    wallet_service = WalletService(MagicMock(), Wallet)
+    save_method = MagicMock()
+
+    with patch.object(
+        wallet_service,
+        "retrieve_one",
+        return_value=default_wallet_db,
+    ), patch.object(
+        wallet_service,
+        "save_instance",
+        save_method,
+    ):
+        app.dependency_overrides[get_wallet_service] = passthrough(wallet_service)
+
+        response = client.post(
+            f"/api/v1/wallets/{default_wallet_db.id}/operation/",
+            json={
+                "operation_type": "WITHDRAW",
+                "amount": "100.01",
+                "user_id": str(default_user_db.id),
+            }
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Not enough money"
+        save_method.assert_not_called()
+        assert default_wallet_db.balance == Decimal("100.00")
+
+
+async def test_operation_on_missing_wallet_returns_404(mock_db_init):
+    wallet_service = WalletService(MagicMock(), Wallet)
+
+    with patch.object(
+        wallet_service,
+        "retrieve_one",
+        return_value=None,
+    ):
+        app.dependency_overrides[get_wallet_service] = passthrough(wallet_service)
+
+        response = client.post(
+            f"/api/v1/wallets/{uuid.uuid4()}/operation/",
+            json={
+                "operation_type": "DEPOSIT",
+                "amount": "10.00",
+                "user_id": str(uuid.uuid4()),
+            }
+        )
+        assert response.status_code == 404
 
 
 async def test_withdraw_from_the_wallet_by_another_user(
