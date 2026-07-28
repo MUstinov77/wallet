@@ -49,7 +49,12 @@ async def _seed_user_and_wallet(session_maker, balance: Decimal):
     user_id = uuid.uuid4()
     wallet_id = uuid.uuid4()
     async with session_maker() as session:
-        session.add(User(id=user_id, username=f"user-{user_id}", hashed_password="hashed"))
+        session.add(User(
+            id=user_id,
+            username=f"user-{user_id}",
+            hashed_password="hashed",
+            hashed_api_token=f"hashed-token-{user_id}",
+        ))
         session.add(Wallet(id=wallet_id, balance=balance, user_id=user_id))
         await session.commit()
     return user_id, wallet_id
@@ -62,7 +67,8 @@ async def test_deposit_persists_to_the_database(session_maker):
         service = WalletService(session, Wallet)
         await service.change_balance(
             wallet_id,
-            OperationRequestSchema(operation_type=OperationType.DEPOSIT, amount=Decimal("50.00"), user_id=user_id),
+            OperationRequestSchema(operation_type=OperationType.DEPOSIT, amount=Decimal("50.00")),
+            user_id,
         )
 
     async with session_maker() as session:
@@ -77,7 +83,8 @@ async def test_withdraw_exact_balance_reaches_zero(session_maker):
         service = WalletService(session, Wallet)
         wallet = await service.change_balance(
             wallet_id,
-            OperationRequestSchema(operation_type=OperationType.WITHDRAW, amount=Decimal("100.00"), user_id=user_id),
+            OperationRequestSchema(operation_type=OperationType.WITHDRAW, amount=Decimal("100.00")),
+            user_id,
         )
         assert wallet.balance == Decimal("0.00")
 
@@ -95,8 +102,9 @@ async def test_withdraw_one_cent_over_balance_fails_and_balance_unchanged(sessio
             await service.change_balance(
                 wallet_id,
                 OperationRequestSchema(
-                    operation_type=OperationType.WITHDRAW, amount=Decimal("100.01"), user_id=user_id
+                    operation_type=OperationType.WITHDRAW, amount=Decimal("100.01")
                 ),
+                user_id,
             )
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Not enough money"
@@ -116,8 +124,9 @@ async def test_withdraw_by_non_owner_fails_and_balance_unchanged(session_maker):
             await service.change_balance(
                 wallet_id,
                 OperationRequestSchema(
-                    operation_type=OperationType.WITHDRAW, amount=Decimal("10.00"), user_id=other_user_id
+                    operation_type=OperationType.WITHDRAW, amount=Decimal("10.00")
                 ),
+                other_user_id,
             )
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Only owner can withdraw money"
@@ -136,8 +145,9 @@ async def test_operation_on_missing_wallet_raises_not_found(session_maker):
             await service.change_balance(
                 missing_wallet_id,
                 OperationRequestSchema(
-                    operation_type=OperationType.DEPOSIT, amount=Decimal("10.00"), user_id=uuid.uuid4()
+                    operation_type=OperationType.DEPOSIT, amount=Decimal("10.00")
                 ),
+                uuid.uuid4(),
             )
 
 
@@ -221,8 +231,9 @@ async def test_concurrent_withdrawals_do_not_overdraw_the_wallet(session_maker):
                 await service.change_balance(
                     wallet_id,
                     OperationRequestSchema(
-                        operation_type=OperationType.WITHDRAW, amount=withdraw_amount, user_id=user_id
+                        operation_type=OperationType.WITHDRAW, amount=withdraw_amount
                     ),
+                    user_id,
                 )
                 return "ok"
             except HTTPException as exc:

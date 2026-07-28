@@ -24,14 +24,6 @@ def mock_db_init():
 
 
 @pytest.fixture(autouse=True)
-def default_user_schema():
-    return {
-        "id": str(uuid.uuid4()),
-        "username": "username",
-        "password": "password"
-    }
-
-@pytest.fixture(autouse=True)
 def default_user_db():
     return User(
         id=uuid.uuid4(),

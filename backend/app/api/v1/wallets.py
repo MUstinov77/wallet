@@ -25,9 +25,10 @@ router = APIRouter(
     response_model=WalletResponseSchema,
 )
 async def get_my_wallet(
-        user_id: uuid.UUID,
+        current_user: User = Depends(get_current_user),
         wallet_service: WalletService = Depends(get_wallet_service),
 ):
+    user_id = current_user.id
     wallet = await wallet_service.retrieve_one(Wallet.user_id, user_id)
     if not wallet:
         raise NotFoundException
