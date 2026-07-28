@@ -13,3 +13,4 @@ class UserSignupSchema(BaseModel):
 class UserResponseSchema(BaseModel):
     id: uuid.UUID
     username: str
+    api_token: str

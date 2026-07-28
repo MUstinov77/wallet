@@ -28,6 +28,12 @@ class User(Base):
         String(),
         nullable=False,
     )
+    hashed_api_token: Mapped[str] = mapped_column(
+        String(),
+        nullable=False,
+        unique=True,
+        comment="SHA-256 hash of the opaque bearer token issued to the user at signup.",
+    )
 
     wallet: Mapped["Wallet"] = relationship(
         back_populates="user",

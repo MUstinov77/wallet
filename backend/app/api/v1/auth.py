@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, status
 
 from backend.app.core.exceptions import NotFoundException
-from backend.app.core.utils.encrypt import get_hashed_password
+from backend.app.core.utils.encrypt import (generate_api_token,
+                                            get_hashed_password,
+                                            hash_api_token)
 from backend.app.schema.auth import UserResponseSchema, UserSignupSchema
 from backend.app.schema.wallet import WalletCreateSchema
 from backend.app.service.user import UserService, get_user_service
@@ -29,10 +31,12 @@ async def signup(
     user_data = create_data.model_dump()
     hashed_password = await get_hashed_password(user_data.pop("password"))
     user_data["hashed_password"] = hashed_password
+    api_token = generate_api_token()
+    user_data["hashed_api_token"] = hash_api_token(api_token)
     user = await user_service.create_instance(user_data)
     if not user:
         raise NotFoundException
     wallet_default_data = WalletCreateSchema(user_id=user.id)
     wallet_create_data = wallet_default_data.model_dump()
     await wallet_service.create_instance(wallet_create_data)
-    return user
+    return UserResponseSchema(id=user.id, username=user.username, api_token=api_token)

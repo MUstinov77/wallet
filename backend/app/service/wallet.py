@@ -20,7 +20,7 @@ def get_wallet_service(
 
 class WalletService(BaseService):
 
-    async def change_balance(self, wallet_id: uuid.UUID, operation_data: OperationRequestSchema):
+    async def change_balance(self, wallet_id: uuid.UUID, operation_data: OperationRequestSchema, user_id: uuid.UUID):
         wallet = await self.retrieve_one(Wallet.id, wallet_id, for_update=True)
         if not wallet:
             raise NotFoundException
@@ -28,7 +28,7 @@ class WalletService(BaseService):
             case OperationType.DEPOSIT:
                 wallet.balance += operation_data.amount
             case OperationType.WITHDRAW:
-                if operation_data.user_id != wallet.user_id:
+                if user_id != wallet.user_id:
                     raise HTTPException(
                         status_code=400,
                         detail="Only owner can withdraw money"
