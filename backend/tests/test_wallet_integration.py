@@ -32,7 +32,7 @@ async def postgres_engine():
             await conn.run_sync(Base.metadata.create_all)
     except Exception as exc:  # noqa: BLE001 - any connectivity failure means "skip", not "error"
         await engine.dispose()
-        pytest.skip(f"Postgres is not reachable ({exc}); run `docker compose up db` to enable integration tests")
+        pytest.skip(f"Postgres is not reachable ({exc}); run Postgres to enable integration tests")
     return engine
 
 @pytest.fixture
