@@ -6,8 +6,6 @@ import pytest
 
 from backend.app.model.user import User
 from backend.app.model.wallet import Wallet
-from backend.app.schema.auth import UserSignupSchema
-from backend.app.schema.wallet import WalletCreateSchema
 
 
 def passthrough(service):
@@ -38,7 +36,8 @@ def default_user_db():
     return User(
         id=uuid.uuid4(),
         username="username",
-        hashed_password="password"
+        hashed_password="password",
+        hashed_api_token="hashed-token",
     )
 
 @pytest.fixture
@@ -54,5 +53,6 @@ def another_user_db():
     return User(
         id=uuid.uuid4(),
         username="another_username",
-        hashed_password="123"
+        hashed_password="123",
+        hashed_api_token="another-hashed-token",
     )
