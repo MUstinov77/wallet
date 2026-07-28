@@ -24,9 +24,8 @@ from backend.app.model.wallet import Wallet
 from backend.app.schema.wallet import OperationRequestSchema
 from backend.app.service.wallet import WalletService
 
-
-@pytest.fixture
-async def session_maker():
+@pytest.fixture(autouse=True)
+async def postgres_engine():
     settings = get_settings()
     engine = create_async_engine(settings.DB_URI)
     try:
@@ -35,27 +34,33 @@ async def session_maker():
     except Exception as exc:  # noqa: BLE001 - any connectivity failure means "skip", not "error"
         await engine.dispose()
         pytest.skip(f"Postgres is not reachable ({exc}); run `docker compose up db` to enable integration tests")
+    return engine
 
-    maker = async_sessionmaker(engine, expire_on_commit=False)
+@pytest.fixture
+async def session_maker(postgres_engine):
+
+    session_maker = async_sessionmaker(postgres_engine, expire_on_commit=False)
     try:
-        yield maker
+        yield session_maker
     finally:
-        async with engine.begin() as conn:
+        async with postgres_engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
-        await engine.dispose()
+        await postgres_engine.dispose()
 
 
 async def _seed_user_and_wallet(session_maker, balance: Decimal):
     user_id = uuid.uuid4()
     wallet_id = uuid.uuid4()
+    user = User(
+                id=user_id,
+                username=f"user-{user_id}",
+                hashed_password="hashed",
+                hashed_api_token=f"hashed-token-{user_id}",
+    )
+    wallet = Wallet(id=wallet_id, balance=balance, user_id=user_id)
     async with session_maker() as session:
-        session.add(User(
-            id=user_id,
-            username=f"user-{user_id}",
-            hashed_password="hashed",
-            hashed_api_token=f"hashed-token-{user_id}",
-        ))
-        session.add(Wallet(id=wallet_id, balance=balance, user_id=user_id))
+        session.add(user)
+        session.add(wallet)
         await session.commit()
     return user_id, wallet_id
 
@@ -152,46 +157,33 @@ async def test_operation_on_missing_wallet_raises_not_found(session_maker):
 
 
 async def test_for_update_blocks_a_concurrent_reader_until_commit(session_maker):
-    """Proves the `SELECT ... FOR UPDATE` in `WalletService.change_balance`
-    actually serializes concurrent access, rather than just asserting an
-    outcome that could pass by scheduling luck under `asyncio.gather` (on a
-    fast loopback DB a handful of concurrent tasks can run to completion one
-    after another without ever truly overlapping, which would make a
-    gather-based race test pass even with the lock removed).
-
-    Instead this drives two transactions in lockstep with an explicit
-    barrier: transaction A locks the wallet row and holds it open, we assert
-    transaction B's own locked read is still pending after a real wait, then
-    releasing A's transaction must be what unblocks B.
-    """
     starting_balance = Decimal("100.00")
     _, wallet_id = await _seed_user_and_wallet(session_maker, starting_balance)
 
-    session_a = session_maker()
-    service_a = WalletService(session_a, Wallet)
-    await service_a.retrieve_one(Wallet.id, wallet_id, for_update=True)
+    session = session_maker()
+    wallet_service = WalletService(session, Wallet)
+    await wallet_service.retrieve_one(Wallet.id, wallet_id, for_update=True)
 
     second_reader_finished = asyncio.Event()
 
     async def locked_read():
-        async with session_maker() as session_b:
-            wallet = await WalletService(session_b, Wallet).retrieve_one(Wallet.id, wallet_id, for_update=True)
+        async with session_maker() as session_for_locked_read:
+            wallet = await WalletService(session_for_locked_read, Wallet).retrieve_one(Wallet.id, wallet_id, for_update=True)
             second_reader_finished.set()
             return wallet.balance
 
     task = asyncio.create_task(locked_read())
     try:
-        await asyncio.sleep(0.3)  # real wall-clock wait, not a scheduling accident
+        await asyncio.sleep(0.3)
         assert not second_reader_finished.is_set(), (
-            "a second FOR UPDATE read completed while transaction A still held the lock -- "
-            "the row is not actually being locked"
+            "The row is not actually being locked"
         )
 
-        await session_a.commit()  # releases the lock A took above
+        await session.commit()
 
         balance_seen_by_second_reader = await asyncio.wait_for(task, timeout=2)
     finally:
-        await session_a.close()
+        await session.close()
 
     assert second_reader_finished.is_set()
     assert balance_seen_by_second_reader == starting_balance
