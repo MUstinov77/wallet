@@ -19,7 +19,6 @@ from backend.app.core.configuration import get_settings
 from backend.app.core.enum.operation import OperationType
 from backend.app.core.exceptions import NotFoundException
 from backend.app.model.base import Base
-from backend.app.model.user import User
 from backend.app.model.wallet import Wallet
 from backend.app.schema.wallet import OperationRequestSchema
 from backend.app.service.wallet import WalletService
@@ -48,32 +47,39 @@ async def session_maker(postgres_engine):
         await postgres_engine.dispose()
 
 
-async def _seed_user_and_wallet(session_maker, balance: Decimal):
-    user_id = uuid.uuid4()
-    wallet_id = uuid.uuid4()
-    user = User(
-                id=user_id,
-                username=f"user-{user_id}",
-                hashed_password="hashed",
-                hashed_api_token=f"hashed-token-{user_id}",
+async def create_wallet(session_maker, balance: Decimal):
+
+    wallet = Wallet(
+        id=uuid.uuid4(),
+        balance=balance
     )
-    wallet = Wallet(id=wallet_id, balance=balance, user_id=user_id)
+
     async with session_maker() as session:
-        session.add(user)
         session.add(wallet)
         await session.commit()
-    return user_id, wallet_id
+
+    return wallet.id
+
+
+async def test_create_wallet_persists_with_zero_balance(session_maker):
+    async with session_maker() as session:
+        service = WalletService(session, Wallet)
+        wallet = await service.create_instance()
+        assert wallet.balance == Decimal("0.00")
+
+    async with session_maker() as session:
+        persisted = await WalletService(session, Wallet).retrieve_one(Wallet.id, wallet.id)
+        assert persisted.balance == Decimal("0.00")
 
 
 async def test_deposit_persists_to_the_database(session_maker):
-    user_id, wallet_id = await _seed_user_and_wallet(session_maker, Decimal("100.00"))
+    wallet_id = await create_wallet(session_maker, Decimal("100.00"))
 
     async with session_maker() as session:
-        service = WalletService(session, Wallet)
-        await service.change_balance(
+        wallet_service = WalletService(session, Wallet)
+        await wallet_service.change_balance(
             wallet_id,
             OperationRequestSchema(operation_type=OperationType.DEPOSIT, amount=Decimal("50.00")),
-            user_id,
         )
 
     async with session_maker() as session:
@@ -82,14 +88,13 @@ async def test_deposit_persists_to_the_database(session_maker):
 
 
 async def test_withdraw_exact_balance_reaches_zero(session_maker):
-    user_id, wallet_id = await _seed_user_and_wallet(session_maker, Decimal("100.00"))
+    wallet_id = await create_wallet(session_maker, Decimal("100.00"))
 
     async with session_maker() as session:
         service = WalletService(session, Wallet)
         wallet = await service.change_balance(
             wallet_id,
             OperationRequestSchema(operation_type=OperationType.WITHDRAW, amount=Decimal("100.00")),
-            user_id,
         )
         assert wallet.balance == Decimal("0.00")
 
@@ -99,7 +104,7 @@ async def test_withdraw_exact_balance_reaches_zero(session_maker):
 
 
 async def test_withdraw_one_cent_over_balance_fails_and_balance_unchanged(session_maker):
-    user_id, wallet_id = await _seed_user_and_wallet(session_maker, Decimal("100.00"))
+    wallet_id = await create_wallet(session_maker, Decimal("100.00"))
 
     async with session_maker() as session:
         service = WalletService(session, Wallet)
@@ -108,33 +113,10 @@ async def test_withdraw_one_cent_over_balance_fails_and_balance_unchanged(sessio
                 wallet_id,
                 OperationRequestSchema(
                     operation_type=OperationType.WITHDRAW, amount=Decimal("100.01")
-                ),
-                user_id,
+                )
             )
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Not enough money"
-
-    async with session_maker() as session:
-        wallet = await WalletService(session, Wallet).retrieve_one(Wallet.id, wallet_id)
-        assert wallet.balance == Decimal("100.00")
-
-
-async def test_withdraw_by_non_owner_fails_and_balance_unchanged(session_maker):
-    user_id, wallet_id = await _seed_user_and_wallet(session_maker, Decimal("100.00"))
-    other_user_id = uuid.uuid4()
-
-    async with session_maker() as session:
-        service = WalletService(session, Wallet)
-        with pytest.raises(HTTPException) as exc_info:
-            await service.change_balance(
-                wallet_id,
-                OperationRequestSchema(
-                    operation_type=OperationType.WITHDRAW, amount=Decimal("10.00")
-                ),
-                other_user_id,
-            )
-        assert exc_info.value.status_code == 400
-        assert exc_info.value.detail == "Only owner can withdraw money"
 
     async with session_maker() as session:
         wallet = await WalletService(session, Wallet).retrieve_one(Wallet.id, wallet_id)
@@ -152,13 +134,12 @@ async def test_operation_on_missing_wallet_raises_not_found(session_maker):
                 OperationRequestSchema(
                     operation_type=OperationType.DEPOSIT, amount=Decimal("10.00")
                 ),
-                uuid.uuid4(),
             )
 
 
 async def test_for_update_blocks_a_concurrent_reader_until_commit(session_maker):
     starting_balance = Decimal("100.00")
-    _, wallet_id = await _seed_user_and_wallet(session_maker, starting_balance)
+    wallet_id = await create_wallet(session_maker, starting_balance)
 
     session = session_maker()
     wallet_service = WalletService(session, Wallet)
@@ -200,7 +181,7 @@ async def test_concurrent_withdrawals_do_not_overdraw_the_wallet(session_maker):
     """
     starting_balance = Decimal("100.00")
     withdraw_amount = Decimal("60.00")
-    user_id, wallet_id = await _seed_user_and_wallet(session_maker, starting_balance)
+    wallet_id = await create_wallet(session_maker, starting_balance)
 
     first_reader_locked = asyncio.Event()
     release_first_transaction = asyncio.Event()
@@ -224,8 +205,7 @@ async def test_concurrent_withdrawals_do_not_overdraw_the_wallet(session_maker):
                     wallet_id,
                     OperationRequestSchema(
                         operation_type=OperationType.WITHDRAW, amount=withdraw_amount
-                    ),
-                    user_id,
+                    )
                 )
                 return "ok"
             except HTTPException as exc:

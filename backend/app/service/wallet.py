@@ -20,7 +20,7 @@ def get_wallet_service(
 
 class WalletService(BaseService):
 
-    async def change_balance(self, wallet_id: uuid.UUID, operation_data: OperationRequestSchema, user_id: uuid.UUID):
+    async def change_balance(self, wallet_id: uuid.UUID, operation_data: OperationRequestSchema):
         wallet = await self.retrieve_one(Wallet.id, wallet_id, for_update=True)
         if not wallet:
             raise NotFoundException
@@ -28,14 +28,9 @@ class WalletService(BaseService):
             case OperationType.DEPOSIT:
                 wallet.balance += operation_data.amount
             case OperationType.WITHDRAW:
-                if user_id != wallet.user_id:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Only owner can withdraw money"
-                    )
                 if wallet.balance - operation_data.amount < 0:
                     raise HTTPException(status_code=400, detail="Not enough money")
                 wallet.balance -= operation_data.amount
             case _:
-                raise HTTPException(status_code=400, detail="Smt gone wrong")
+                raise HTTPException(status_code=400, detail="Something gone wrong, please contact the support team")
         return await self.save_instance(wallet)

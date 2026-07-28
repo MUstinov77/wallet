@@ -12,8 +12,8 @@ class BaseService:
         self.session: AsyncSession = session
         self.model = model
 
-    async def create(self, values: dict):
-        record = self.model(**values)
+    async def create(self):
+        record = self.model()
         self.session.add(record)
         await self.session.commit()
         return record
@@ -56,9 +56,9 @@ class BaseService:
         result = await self.session.execute(query)
         return result.scalars().all()
 
-    async def create_instance(self, values: dict, *args):
+    async def create_instance(self):
         try:
-            record = await self.create(values)
+            record = await self.create()
             await self.session.commit()
             return record
         except SQLAlchemyError as e:
@@ -69,7 +69,7 @@ class BaseService:
                 detail="Error while creating instance",
             )
 
-    async def delete_instance(self, obj_id: int, *args):
+    async def delete_instance(self, obj_id: int):
         try:
             record = await self.delete(obj_id)
             await self.session.commit()

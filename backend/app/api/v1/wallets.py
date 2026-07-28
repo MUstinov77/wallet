@@ -4,11 +4,9 @@ from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
 
 from backend.app.core.exceptions import NotFoundException
-from backend.app.model.user import User
 from backend.app.model.wallet import Wallet
 from backend.app.schema.wallet import (OperationRequestSchema,
                                        WalletResponseSchema)
-from backend.app.service.user import get_current_user
 from backend.app.service.wallet import WalletService, get_wallet_service
 
 
@@ -20,18 +18,19 @@ router = APIRouter(
 )
 
 
-@router.get(
+@router.post(
     "/",
     response_model=WalletResponseSchema,
 )
-async def get_my_wallet(
-        current_user: User = Depends(get_current_user),
-        wallet_service: WalletService = Depends(get_wallet_service),
+async def create_wallet(
+    wallet_service: WalletService = Depends(get_wallet_service),
 ):
-    user_id = current_user.id
-    wallet = await wallet_service.retrieve_one(Wallet.user_id, user_id)
+    wallet = await wallet_service.create_instance()
     if not wallet:
-        raise NotFoundException
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to create wallet",
+        )
     return wallet
 
 
@@ -56,13 +55,12 @@ async def get_wallet(
 async def change_wallet_balance(
     wallet_id: uuid.UUID,
     operation_data: OperationRequestSchema,
-    current_user: User = Depends(get_current_user),
     wallet_service: WalletService = Depends(get_wallet_service),
 ):
-    updated_wallet = await wallet_service.change_balance(wallet_id, operation_data, current_user.id)
+    updated_wallet = await wallet_service.change_balance(wallet_id, operation_data)
     if not updated_wallet:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to change wallet balance",
         )
     return updated_wallet

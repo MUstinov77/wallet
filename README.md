@@ -1,6 +1,6 @@
 # WalletAPI
 
-FastAPI-приложение для кошельков пользователей, снятия и хранения средств.
+FastAPI-приложение для кошельков: хранение, пополнение и снятие средств.
 
 ## Технологии
  ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
@@ -18,9 +18,8 @@ FastAPI-приложение для кошельков пользователе�
    `docker compose up --build`
 4. Проверка работоспособности:
    откройте `http://0.0.0.0:8000/docs`
-5. Создайте пользователя по эндпоинту `http://0.0.0.0:8000/api/v1/auth/signup` — в ответе придёт `api_token`, сохраните его: это единственный раз, когда он возвращается в открытом виде.
-6. Для операций с кошельком (`POST /operation`) передавайте токен в заголовке: `Authorization: Bearer <api_token>`.
-7. Остановка и очистка:
+5. Создайте кошелёк по эндпоинту `POST http://0.0.0.0:8000/api/v1/wallets/` — в ответе придёт `id` кошелька, сохраните его: он используется во всех дальнейших запросах к этому кошельку.
+6. Остановка и очистка:
    `docker compose down -v`
 
 ## Переменные окружения
@@ -31,17 +30,20 @@ FastAPI-приложение для кошельков пользователе�
 - `DB_PORT` - порт для подключения к БД.
 - `DB_NAME` - имя БД.
 
+## Авторизация
+
+⚠️ В проекте нет пользователей, аутентификации или авторизации: кошелёк ничей, и **любой, кто знает `wallet_id`, может снять с него деньги** (`POST /operation` с `WITHDRAW`), а не только пополнить. Единственный контроль — проверка баланса (нельзя увести его в минус). Относитесь к `wallet_id` как к секрету и не раскрывайте его.
+
 ## Основные эндпоинты
 
-- `POST /api/v1/auth/signup` — регистрация пользователя, в ответе возвращается `api_token`.
-- `GET /api/v1/wallets/?user_id={user_id}` — получение кошелька пользователя.
-- `GET /api/v1/wallets/{wallet_id}` — получение кошелька другого пользователя.
-- `POST /api/v1/wallets/{wallet_id}/operation` — действия с кошельком. Требует заголовок `Authorization: Bearer <api_token>`; для `WITHDRAW` владельцем кошелька должен быть именно авторизованный пользователь (сверяется с токеном, а не с полем в теле запроса).
+- `POST /api/v1/wallets/` — создание кошелька с нулевым балансом, в ответе возвращается `id` кошелька.
+- `GET /api/v1/wallets/{wallet_id}` — получение кошелька по идентификатору.
+- `POST /api/v1/wallets/{wallet_id}/operation` — пополнение (`DEPOSIT`) или снятие (`WITHDRAW`) средств. Тело запроса: `{"operation_type": "DEPOSIT"|"WITHDRAW", "amount": "10.00"}`. Проверки владельца нет: снять деньги может любой, кто знает `wallet_id`.
 
 ## Примечания
 - Запуск проверки на стиль синтаксиса `cd backend && flake8`
 - Запуск тестов проекта `cd backend && pytest tests/`
-- Если при `docker compose up --build` контейнер `app` падает на `alembic upgrade head` с ошибкой `NotNullViolationError: column "hashed_api_token" of relation "users" contains null values` — в volume `db_data` осталась БД со старой схемой (до добавления `hashed_api_token`). Исправляется очисткой volume: `docker compose down -v`, затем `docker compose up --build`.
+- Если при `docker compose up --build` контейнер `app` падает на `alembic upgrade head` с ошибкой несоответствия схемы — в volume `db_data` осталась БД со старой схемой. Исправляется очисткой volume: `docker compose down -v`, затем `docker compose up --build`.
 
 
 ### Автор проекта [** Максим Устинов**](https://github.com/MUstinov77)

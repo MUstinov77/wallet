@@ -1,15 +1,11 @@
 import uuid
 from decimal import Decimal
-from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, text
+from sqlalchemy import CheckConstraint, Numeric, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
-
-if TYPE_CHECKING:
-    from backend.app.model.user import User
 
 
 class Wallet(Base):
@@ -27,13 +23,6 @@ class Wallet(Base):
 
     balance: Mapped[Decimal] = mapped_column(
         Numeric(18, 2),
+        server_default=text("0"),
         comment="Balance of user's wallet"
-    )
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id"),
-    )
-    user: Mapped["User"] = relationship(
-        back_populates="wallet",
-        lazy="selectin"
     )
