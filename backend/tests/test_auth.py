@@ -6,8 +6,8 @@ from backend.app.app_factory import create_app
 from backend.app.schema.auth import UserSignupSchema
 from backend.app.service.user import UserService, get_user_service
 from backend.app.service.wallet import WalletService, get_wallet_service
-from backend.tests.coftest import (default_user_db, default_wallet_db,
-                                   mock_db_init, passthrough)
+from backend.tests.conftest import (default_user_db, default_wallet_db,
+                                    mock_db_init, passthrough)
 
 app = create_app()
 client = TestClient(app)
